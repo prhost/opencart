@@ -60,8 +60,12 @@ class ControllerToolBackup extends Controller {
 			$json['error'] = $this->language->get('error_permission');
 		}
 		
-		if (isset($this->request->files['import']['tmp_name'])) {
+		if (isset($this->request->files['import']['tmp_name']) && is_uploaded_file($this->request->files['import']['tmp_name'])) {
 			$filename = basename(html_entity_decode($this->request->files['import']['tmp_name'], ENT_QUOTES, 'UTF-8'));
+			
+			$filename = basename(tempnam(ini_get('upload_tmp_dir'), 'bac'));
+			
+			move_uploaded_file($this->request->files['import']['tmp_name'], ini_get('upload_tmp_dir') . '/' . $filename);
 		} elseif (isset($this->request->get['import'])) {
 			$filename = basename(html_entity_decode($this->request->get['import'], ENT_QUOTES, 'UTF-8'));
 		} else {
@@ -81,6 +85,7 @@ class ControllerToolBackup extends Controller {
 		if (!$json) {
 			// We set $i so we can batch execute the queries rather than do them all at once.
 			$i = 0;
+			$start = false;
 			
 			$handle = fopen(ini_get('upload_tmp_dir') . '/' . $filename, 'r');
 
@@ -110,13 +115,19 @@ class ControllerToolBackup extends Controller {
 
 			$position = ftell($handle);
 
-			$json['success'] = $this->language->get('text_success');
+			$size = filesize(ini_get('upload_tmp_dir') . '/' . $filename);
+
+			$json['success'] = sprintf($this->language->get('text_success'), round(($position / $size) * 100));
 			
 			if ($position && !feof($handle)) {
 				$json['next'] = str_replace('&amp;', '&', $this->url->link('tool/backup/import', 'token=' . $this->session->data['token'] . '&import=' . $filename . '&position=' . $position));
+			
+				fclose($handle);
+			} else {
+				fclose($handle);
+				
+				unlink(ini_get('upload_tmp_dir') . '/' . $filename);
 			}
-
-			fclose($handle);
 		}
 
 		$this->response->addHeader('Content-Type: application/json');
